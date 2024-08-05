@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 import datetime
+import traceback
 
 # Load model
-model = load_model('lstm_model.h5') 
+model = load_model('lstm_model.h5')
 
 # Load and preprocess data
 df = pd.read_csv('KLBF.JK.csv')
@@ -90,9 +91,14 @@ if st.button('Predict'):
             last_data = last_data.reshape((1, 1, 1))
 
             for _ in range(len(future_dates)):
-                predicted_close_ms = model.predict(last_data)
-                predicted_closes_ms.append(predicted_close_ms[0, 0])
-                last_data = predicted_close_ms.reshape((1, 1, 1))
+                try:
+                    predicted_close_ms = model.predict(last_data)
+                    predicted_closes_ms.append(predicted_close_ms[0, 0])
+                    last_data = predicted_close_ms.reshape((1, 1, 1))
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan dalam prediksi: {e}")
+                    traceback.print_exc()
+                    break
 
             predicted_closes = ms.inverse_transform(np.array(predicted_closes_ms).reshape(-1, 1))
             df_future = pd.DataFrame(predicted_closes, index=future_dates, columns=['Close'])
@@ -113,3 +119,6 @@ if st.button('Predict'):
 
         except ValueError:
             st.error("Invalid date format. Please enter the date in YYYY-MM-DD format.")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan: {e}")
+            traceback.print_exc()
