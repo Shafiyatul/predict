@@ -1,115 +1,71 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import datetime
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-import datetime
-from sklearn.preprocessing import MinMaxScaler
+import yfinance as yf
 from tensorflow.keras.models import load_model
-import pandas_datareader as pdr
+from sklearn.preprocessing import MinMaxScaler
 
-# Fungsi untuk mengunduh data saham dari Yahoo Finance menggunakan pandas_datareader
-def load_stock_data(ticker):
-    try:
-        # Mendapatkan data dari 2019 hingga hari ini
-        start_date = datetime.datetime(2019, 1, 1)
-        end_date = datetime.datetime.now()
-        data = pdr.data.get_data_yahoo(ticker, start=start_date, end=end_date)
+# Load the model
+model = load_model('lstm_model.h5')
 
-        # Debugging: Tampilkan beberapa baris pertama dari data
-        st.write("Data saham berhasil diunduh:")
-        st.write(data.head())
+# Function to get historical stock prices
+def get_stock_data(ticker, start, end):
+    stock_data = yf.download(ticker, start=start, end=end)
+    return stock_data
 
-        return data
-    except Exception as e:
-        st.error(f"Error mengunduh data saham: {e}")
-        return pd.DataFrame()  # Mengembalikan DataFrame kosong jika terjadi kesalahan
+# Function to make prediction
+def predict_stock_price(model, data, scaler):
+    data_scaled = scaler.transform(data.values.reshape(-1, 1))
+    last_data = data_scaled[-1].reshape((1, 1, 1))
+    predicted_scaled = model.predict(last_data)
+    predicted = scaler.inverse_transform(predicted_scaled)
+    return predicted[0][0]
 
-# Fungsi untuk memprediksi harga saham
-def predict_stock_price(model, last_data, scaler, days_to_predict):
-    predictions = []
-    current_data = last_data.copy()
+# Streamlit App
+st.title('Stock Price Prediction App')
+st.write("Predict the future stock prices of PT Kalbe Farma Tbk. using LSTM.")
 
-    for _ in range(days_to_predict):
-        # Melakukan prediksi
-        predicted_scaled = model.predict(current_data)
-        # Simpan hasil prediksi
-        predictions.append(predicted_scaled[0][0])
+# Date input
+start_date = st.date_input("Start Date", datetime.date(2019, 1, 1))
+end_date = st.date_input("End Date", datetime.date.today())
 
-        # Perbarui data dengan memasukkan prediksi terakhir
-        current_data = np.append(current_data[:, 1:, :], [[predicted_scaled]], axis=1)
-
-    # Inverse transformasi prediksi ke skala aslinya
-    predicted_prices = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
-
-    return predicted_prices
-
-# Mengatur halaman
-st.set_page_config(page_title="Prediksi Harga Saham PT Kalbe Farma Tbk", layout="wide")
-
-# Menampilkan judul
-st.title("Prediksi Harga Saham PT Kalbe Farma Tbk.")
-
-# Input ticker
-ticker = "KLBF.JK"
-
-# Memuat data saham
-st.sidebar.header("Parameter")
-stock_data = load_stock_data(ticker)
-
-# Memeriksa apakah data berhasil diunduh
-if stock_data.empty:
-    st.warning("Data saham tidak tersedia atau terjadi kesalahan saat mengunduh.")
+if start_date >= end_date:
+    st.error("End date must be after start date.")
 else:
-    # Menampilkan opsi tanggal prediksi
-    min_date = stock_data.index.max() + pd.Timedelta(days=1)
-    max_date = min_date + pd.DateOffset(years=2)
-    selected_date = st.sidebar.date_input(
-        "Pilih tanggal prediksi:", min_value=min_date, max_value=max_date, value=min_date
-    )
+    # Get historical data
+    df = get_stock_data('KLBF.JK', start=start_date, end=end_date)
+    st.subheader('Historical Stock Prices')
+    st.line_chart(df['Close'])
 
-    # Memuat model dan scaler
-    model = load_model('lstm_model.h5')
+    # Prepare data for prediction
     scaler = MinMaxScaler(feature_range=(0, 1))
+    df['Close_scaled'] = scaler.fit_transform(df[['Close']])
 
-    # Mengambil data harga penutupan dan menskalakan data
-    stock_data['Close_scaled'] = scaler.fit_transform(stock_data[['Close']])
+    # Predict future prices
+    future_years = st.slider('Years to Predict', 1, 2, 1)
+    prediction_date = end_date + pd.DateOffset(years=future_years)
 
-    # Mengambil data terbaru untuk prediksi
-    last_data = stock_data['Close_scaled'].values[-1].reshape((1, 1, 1))
+    if prediction_date.weekday() >= 5:  # Skip weekends
+        prediction_date += pd.DateOffset(days=(7 - prediction_date.weekday()))
 
-    # Hitung hari prediksi (tidak termasuk akhir pekan)
-    days_to_predict = 0
-    date = min_date
-    while date <= selected_date:
-        if date.weekday() < 5:  # 0-4 adalah hari kerja
-            days_to_predict += 1
-        date += pd.Timedelta(days=1)
+    predicted_price = predict_stock_price(model, df['Close_scaled'], scaler)
+    st.subheader(f'Predicted Stock Price for {prediction_date.strftime("%Y-%m-%d")}')
+    st.write(f"Rp {predicted_price:.2f}")
 
-    # Memprediksi harga saham
-    predicted_prices = predict_stock_price(model, last_data, scaler, days_to_predict)
+    # Visualization
+    df_pred = df.copy()
+    df_pred.loc[prediction_date] = [None] * (len(df.columns) - 1) + [predicted_price]
 
-    # Menampilkan grafik riwayat dan prediksi harga saham
-    st.subheader("Riwayat Harga Saham dan Prediksi")
-    fig, ax = plt.subplots(figsize=(15, 7))
-    ax.plot(stock_data.index, stock_data['Close'], label='Riwayat Harga Saham', color='blue')
-
-    # Menambahkan prediksi ke grafik
-    predicted_dates = pd.date_range(start=min_date, periods=days_to_predict, freq='B')
-    ax.plot(predicted_dates, predicted_prices, linestyle='dotted', color='red', label='Prediksi Harga Saham')
-
-    ax.set_xlabel('Tanggal')
-    ax.set_ylabel('Harga Saham (Rp)')
-    ax.set_title('Prediksi Harga Saham PT Kalbe Farma Tbk.')
-    ax.legend()
-
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    ax.xaxis.set_major_locator(mdates.MonthLocator())
-    plt.xticks(rotation=30)
-
-    st.pyplot(fig)
-
-    # Menampilkan harga prediksi terakhir
-    st.subheader(f"Prediksi Harga Saham untuk {selected_date}:")
-    predicted_price = predicted_prices[-1][0]
-    st.write(f"Rp {predicted_price:,.2f}")
+    plt.figure(figsize=(15, 7))
+    plt.plot(df.index, df['Close'], color='blue', label='Actual')
+    plt.plot(df_pred.index, df_pred['Close_scaled'], color='red', linestyle='dotted', label='Predicted')
+    plt.xlabel('Time')
+    plt.ylabel('Stock Price')
+    plt.title('Stock Price Prediction\nPT Kalbe Farma Tbk.\nLSTM', fontsize=20)
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=12))
+    plt.legend()
+    st.pyplot(plt)
