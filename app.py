@@ -2,84 +2,100 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from datetime import datetime, timedelta
+from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
-import tensorflow as tf
+import datetime
 
-# Load the trained model
-model = tf.keras.models.load_model('lstm_model.h5')
+# Load model
+model = load_model('lstm_model.h5') 
 
-# Load and preprocess the dataset
+# Load and preprocess data
 df = pd.read_csv('KLBF.JK.csv')
 df['Date'] = pd.to_datetime(df['Date'])
-df = df.set_index('Date')
-
-# Scale the Close prices
+df.set_index('Date', inplace=True)
 ms = MinMaxScaler(feature_range=(0, 1))
 df['Close_ms'] = ms.fit_transform(df[['Close']])
 
 # Streamlit app
-st.title("Stock Price Prediction: PT Kalbe Farma Tbk.")
-st.markdown("""
-    This app predicts the stock price of PT Kalbe Farma Tbk. using an LSTM model.
-    Select a target date to predict the stock price.
-""")
+st.title('Stock Price Prediction')
 
-# User input for the target date
-last_date = df.index[-1]
-target_date = st.date_input("Select a target date for prediction", datetime(2024, 8, 5))
-st.write(f"Selected target date: {target_date}")
+st.markdown(
+    """
+    <style>
+    @keyframes shake {
+        0% { transform: translateX(0); }
+        25% { transform: translateX(-10px); }
+        50% { transform: translateX(10px); }
+        75% { transform: translateX(-10px); }
+        100% { transform: translateX(0); }
+    }
 
-# Calculate the number of days to predict
-num_days = (target_date - last_date).days
-if num_days <= 0:
-    st.error("The selected date must be in the future.")
-else:
-    # Predict function
-    def predict_future_prices(num_days):
-        # Prepare the last data point
+    .reportview-container {
+        background-color: #e0f7fa; /* Hijau muda */
+        animation: shake 5s infinite;
+    }
+    .css-1n6g4vv {
+        display: flex;
+        justify-content: flex-end;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    **Welcome to the Stock Price Prediction App!**
+    This application predicts the stock price of PT Kalbe Farma Tbk based on historical data.
+    Use the calendar to select a date to see the predicted stock price on that date.
+    """
+)
+
+# Input date using date picker
+selected_date = st.date_input("Select the date:", value=None, format="YYYY-MM-DD", key='date_picker')
+
+if selected_date:
+    try:
+        target_date = datetime.datetime.combine(selected_date, datetime.datetime.min.time())
+
+        # Prediction logic
+        def get_next_weekday(date):
+            next_day = date + pd.Timedelta(days=1)
+            while next_day.weekday() > 4:  # 5 is Saturday, 6 is Sunday
+                next_day += pd.Timedelta(days=1)
+            return next_day
+
+        current_date = df.index[-1]
+        future_dates = []
+        while current_date < target_date:
+            current_date = get_next_weekday(current_date)
+            future_dates.append(current_date)
+
+        predicted_closes_ms = []
         last_data = df['Close_ms'].values[-1].reshape(-1, 1)
         last_data = last_data.reshape((1, 1, 1))
 
-        future_prices = []
-        future_dates = []
-        current_date = last_date
-
-        for _ in range(num_days):
+        for _ in range(len(future_dates)):
             predicted_close_ms = model.predict(last_data)
-            predicted_close = ms.inverse_transform(predicted_close_ms)
-            future_prices.append(predicted_close[0][0])
-
-            # Prepare for the next iteration
+            predicted_closes_ms.append(predicted_close_ms[0, 0])
             last_data = predicted_close_ms.reshape((1, 1, 1))
-            current_date += timedelta(days=1)
-            future_dates.append(current_date)
 
-        return future_dates, future_prices
+        predicted_closes = ms.inverse_transform(np.array(predicted_closes_ms).reshape(-1, 1))
+        df_future = pd.DataFrame(predicted_closes, index=future_dates, columns=['Close'])
+        df_combined = pd.concat([df, df_future])
 
-    # Display the predicted prices
-    if st.button("Predict"):
-        future_dates, future_prices = predict_future_prices(num_days)
-        st.write(f"Predicted stock prices up to {target_date}:")
+        st.write(f"Predicted price on {selected_date.strftime('%Y-%m-%d')}: **Rp {predicted_closes[-1][0]:.2f}**")
 
-        # Create a dataframe for the predicted prices
-        future_df = pd.DataFrame({'Date': future_dates, 'Predicted_Close': future_prices})
-        future_df.set_index('Date', inplace=True)
-        st.write(future_df)
+        # Plotting
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(df.index, df['Close'], label='Historical Price', color='blue')
+        ax.plot(df_combined.index, df_combined['Close'], label='Predicted Price', color='red', linestyle='--')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Stock Price (Rp)')
+        ax.set_title('Stock Price Prediction')
+        ax.legend()
+        ax.grid(True)
+        st.pyplot(fig)
 
-        # Plot the actual and predicted prices
-        plt.figure(figsize=(15, 7))
-        plt.plot(df.index, df['Close'], color='blue', label='Actual')
-        plt.plot(future_df.index, future_df['Predicted_Close'], color='red', linestyle='dotted', label='Predicted')
-        plt.xlabel('Date')
-        plt.ylabel('Stock Price (Rp)')
-        plt.title(f'Stock Price Prediction\nPT Kalbe Farma Tbk.\nLSTM until {target_date}', fontsize=20)
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=12))
-        plt.legend()
-        st.pyplot(plt)
-
-    # Display the original data
-    st.subheader("Historical Data")
-    st.write(df[['Close']].tail())
+    except ValueError:
+        st.error("Invalid date format. Please enter the date in YYYY-MM-DD format.")
