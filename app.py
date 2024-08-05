@@ -38,10 +38,6 @@ model = load_model('stock_price_lstm.h5')  # Ganti dengan path model Anda
 df = pd.read_csv('KLBF.JK.csv')
 df['Date'] = pd.to_datetime(df['Date'])
 df.set_index('Date', inplace=True)
-
-# Filter data from 2019 onwards
-df = df[df.index >= '2019-01-01']
-
 ms = MinMaxScaler(feature_range=(0, 1))
 df['Close_ms'] = ms.fit_transform(df[['Close']])
 
@@ -50,15 +46,39 @@ st.title('Stock Price Prediction')
 
 st.markdown(
     """
+    <style>
+    @keyframes shake {
+        0% { transform: translateX(0); }
+        25% { transform: translateX(-10px); }
+        50% { transform: translateX(10px); }
+        75% { transform: translateX(-10px); }
+        100% { transform: translateX(0); }
+    }
+
+    .reportview-container {
+        background-color: #e0f7fa; /* Hijau muda */
+        animation: shake 5s infinite;
+    }
+    .css-1n6g4vv {
+        display: flex;
+        justify-content: flex-end;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
     **Welcome to the Stock Price Prediction App!**
-    This application predicts the stock price of PT Kalbe Farma Tbk based on historical data from 2019 onwards.
-    Use the calendar to select a date to see the predicted stock price on that date (up to 2 years ahead).
+    This application predicts the stock price of PT Kalbe Farma Tbk based on historical data.
+    Use the calendar to select a date to see the predicted stock price on that date.
     """
 )
 
-# Input date using date picker, allow up to 2 years ahead
+# Input date using date picker, allow up to 2 years ahead, starting from 2023
 two_years_ahead = datetime.date.today() + datetime.timedelta(days=2*365)
-selected_date = st.date_input("Select the date:", value=None, min_value=datetime.date.today(), max_value=two_years_ahead, key='date_picker')
+selected_date = st.date_input("Select the date:", value=None, min_value=datetime.date(2023, 1, 1), max_value=two_years_ahead, key='date_picker')
 
 if selected_date:
     try:
