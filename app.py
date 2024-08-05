@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-import datetime
+from datetime import date
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 import yfinance as yf
@@ -39,6 +39,13 @@ st.title("Prediksi Harga Saham PT Kalbe Farma Tbk.")
 
 # Input ticker
 ticker = "KLBF.JK"
+
+# Fungsi untuk memuat data saham
+def load_stock_data(ticker):
+    data = yf.download(ticker, start=start, end=end)
+    data.reset_index(inplace=True)
+    data.set_index("Date", inplace=True)
+    return data
 
 # Memuat data saham
 st.sidebar.header("Parameter")
