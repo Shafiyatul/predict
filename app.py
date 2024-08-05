@@ -2,105 +2,78 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from tensorflow.keras.models import load_model
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
-import datetime
+import tensorflow as tf
 
-# Mengubah warna latar belakang dan menambahkan efek goyang
-st.markdown(
-    """
-    <style>
-    @keyframes shake {
-        0% { transform: translateX(0); }
-        25% { transform: translateX(-10px); }
-        50% { transform: translateX(10px); }
-        75% { transform: translateX(-10px); }
-        100% { transform: translateX(0); }
-    }
+# Load the trained model
+model = tf.keras.models.load_model('lstm_model.h5')
 
-    .reportview-container {
-        background-color: #e0f7fa; /* Hijau muda */
-        animation: shake 5s infinite;
-    }
-    .css-1n6g4vv {
-        display: flex;
-        justify-content: flex-end;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# Load model
-model = load_model('stock_price_lstm.h5')  # Ganti dengan path model Anda
-
-# Load and preprocess data
+# Load and preprocess the dataset
 df = pd.read_csv('KLBF.JK.csv')
 df['Date'] = pd.to_datetime(df['Date'])
-df.set_index('Date', inplace=True)
+df = df.set_index('Date')
+
+# Scale the Close prices
 ms = MinMaxScaler(feature_range=(0, 1))
 df['Close_ms'] = ms.fit_transform(df[['Close']])
 
 # Streamlit app
-st.title('Stock Price Prediction')
+st.title("Stock Price Prediction: PT Kalbe Farma Tbk.")
+st.markdown("""
+    This app predicts the stock price of PT Kalbe Farma Tbk. using an LSTM model.
+    Select the number of days to predict up to 2 years (730 days).
+""")
 
-st.markdown(
-    """
-    **Welcome to the Stock Price Prediction App!**
-    This application predicts the stock price of PT Kalbe Farma Tbk based on historical data.
-    Use the calendar to select a date to see the predicted stock price on that date.
-    """
-)
+# User input for the number of days to predict
+num_days = st.slider("Select the number of days to predict", 1, 730)
+st.write(f"Selected number of days: {num_days}")
 
-# Input date using date picker, allow up to 2 years ahead, starting from 2023
-two_years_ahead = datetime.date.today() + datetime.timedelta(days=2*365)
-selected_date = st.date_input("Select the date:", value=None, min_value=datetime.date(2024, 4, 1), max_value=two_years_ahead, key='date_picker')
+# Predict function
+def predict_future_prices(num_days):
+    # Prepare the last data point
+    last_data = df['Close_ms'].values[-1].reshape(-1, 1)
+    last_data = last_data.reshape((1, 1, 1))
+    
+    future_prices = []
+    future_dates = []
+    last_date = df.index[-1]
 
-if selected_date:
-    try:
-        target_date = datetime.datetime.combine(selected_date, datetime.datetime.min.time())
+    for _ in range(num_days):
+        predicted_close_ms = model.predict(last_data)
+        predicted_close = ms.inverse_transform(predicted_close_ms)
+        future_prices.append(predicted_close[0][0])
 
-        # Prediction logic
-        def get_next_weekday(date):
-            next_day = date + pd.Timedelta(days=1)
-            while next_day.weekday() > 4:  # Skip Saturdays (5) and Sundays (6)
-                next_day += pd.Timedelta(days=1)
-            return next_day
+        # Prepare for the next iteration
+        last_data = predicted_close_ms.reshape((1, 1, 1))
+        last_date += timedelta(days=1)
+        future_dates.append(last_date)
+    
+    return future_dates, future_prices
 
-        current_date = df.index[-1]
-        future_dates = []
-        while current_date < target_date:
-            current_date = get_next_weekday(current_date)
-            future_dates.append(current_date)
+# Display the predicted prices
+if st.button("Predict"):
+    future_dates, future_prices = predict_future_prices(num_days)
+    st.write(f"Predicted stock prices for the next {num_days} days:")
 
-        predicted_closes_ms = []
-        last_data = df['Close_ms'].values[-1].reshape(-1, 1)
-        last_data = last_data.reshape((1, 1, 1))
+    # Create a dataframe for the predicted prices
+    future_df = pd.DataFrame({'Date': future_dates, 'Predicted_Close': future_prices})
+    future_df.set_index('Date', inplace=True)
+    st.write(future_df)
 
-        for _ in range(len(future_dates)):
-            predicted_close_ms = model.predict(last_data)
-            predicted_closes_ms.append(predicted_close_ms[0, 0])
-            last_data = predicted_close_ms.reshape((1, 1, 1))
+    # Plot the actual and predicted prices
+    plt.figure(figsize=(15, 7))
+    plt.plot(df.index, df['Close'], color='blue', label='Actual')
+    plt.plot(future_df.index, future_df['Predicted_Close'], color='red', linestyle='dotted', label='Predicted')
+    plt.xlabel('Date')
+    plt.ylabel('Stock Price (Rp)')
+    plt.title(f'Stock Price Prediction\nPT Kalbe Farma Tbk.\nLSTM ({num_days} days)', fontsize=20)
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=12))
+    plt.legend()
+    st.pyplot(plt)
 
-        predicted_closes = ms.inverse_transform(np.array(predicted_closes_ms).reshape(-1, 1))
-        df_future = pd.DataFrame(predicted_closes, index=future_dates, columns=['Close'])
-        df_combined = pd.concat([df, df_future])
-
-        # Filter out weekends from the combined dataframe
-        df_combined = df_combined[df_combined.index.weekday < 5]
-
-        st.write(f"Predicted price on {selected_date.strftime('%Y-%m-%d')}: **Rp {predicted_closes[-1][0]:.2f}**")
-
-        # Plotting
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(df.index, df['Close'], label='Historical Price', color='blue')
-        ax.plot(df_combined.index, df_combined['Close'], label='Predicted Price', color='red', linestyle='--')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Stock Price (Rp)')
-        ax.set_title('Stock Price Prediction')
-        ax.legend()
-        ax.grid(True)
-        st.pyplot(fig)
-
-    except ValueError:
-        st.error("Invalid date format. Please enter the date in YYYY-MM-DD format.")
+# Display the original data
+st.subheader("Historical Data")
+st.write(df[['Close']].tail())
