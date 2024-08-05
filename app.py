@@ -35,6 +35,10 @@ st.write(f"Last data values for prediction: {last_data}")
 # Predict the price for the input date
 if st.button('Prediksi Harga Saham'):
     try:
+        # Check data types and shapes
+        st.write(f"Type of last_data: {type(last_data)}")
+        st.write(f"Last_data: {last_data}")
+
         # Perform prediction
         predicted_close_ms = model.predict(last_data)
         predicted_close = scaler.inverse_transform(predicted_close_ms)
