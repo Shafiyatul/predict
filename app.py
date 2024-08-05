@@ -12,6 +12,18 @@ import yfinance as yf
 start = '2019-04-01'
 end = date.today()
 
+# Fungsi untuk memuat data saham
+@st.cache
+def load_stock_data(ticker):
+    try:
+        data = yf.download(ticker, start=start, end=end, progress=False)
+        data.reset_index(inplace=True)
+        data.set_index("Date", inplace=True)
+        return data
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return pd.DataFrame()  # Return an empty DataFrame in case of error
+
 # Fungsi untuk memprediksi harga saham
 def predict_stock_price(model, last_data, scaler, days_to_predict):
     predictions = []
@@ -39,13 +51,6 @@ st.title("Prediksi Harga Saham PT Kalbe Farma Tbk.")
 
 # Input ticker
 ticker = "KLBF.JK"
-
-# Fungsi untuk memuat data saham
-def load_stock_data(ticker):
-    data = yf.download(ticker, start=start, end=end)
-    data.reset_index(inplace=True)
-    data.set_index("Date", inplace=True)
-    return data
 
 # Memuat data saham
 st.sidebar.header("Parameter")
