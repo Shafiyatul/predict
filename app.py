@@ -3,26 +3,15 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import date
+import datetime
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
 import yfinance as yf
 
 # Fungsi untuk mengunduh data saham dari Yahoo Finance
-start = '2019-04-01'
-end = date.today()
-
-# Fungsi untuk memuat data saham
-@st.cache
 def load_stock_data(ticker):
-    try:
-        data = yf.download(ticker, start=start, end=end, progress=False)
-        data.reset_index(inplace=True)
-        data.set_index("Date", inplace=True)
-        return data
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return pd.DataFrame()  # Return an empty DataFrame in case of error
+    # Mendapatkan data dari 2019 hingga hari ini
+    return yf.download(ticker, start='2019-01-01')
 
 # Fungsi untuk memprediksi harga saham
 def predict_stock_price(model, last_data, scaler, days_to_predict):
