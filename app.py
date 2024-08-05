@@ -6,7 +6,6 @@ import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
-import yfinance as yf
 
 # Load the trained model
 model = tf.keras.models.load_model('lstm_model.h5')
