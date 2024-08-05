@@ -22,19 +22,10 @@ def load_data():
 
 df, ms = load_data()
 
-def prepare_data(df, look_back=1):
-    values = df['Close_ms'].values.reshape(-1, 1)
-    X, y = [], []
-    for i in range(len(values) - look_back):
-        a = values[i:(i + look_back), 0]
-        X.append(a)
-        y.append(values[i + look_back, 0])
-    X, y = np.array(X), np.array(y)
-    X = X.reshape((X.shape[0], 1, X.shape[1]))
-    return X, y
-
-# Prepare training data
-X_train, y_train = prepare_data(df)
+def prepare_input(df, look_back=1):
+    # Use last data to prepare the input for prediction
+    last_data = df['Close_ms'].values[-look_back:].reshape(1, look_back, 1)
+    return last_data
 
 # Streamlit app
 st.title('Stock Price Prediction with LSTM')
@@ -42,37 +33,44 @@ st.title('Stock Price Prediction with LSTM')
 date_input = st.date_input("Select the date to predict", pd.to_datetime(df.index[-1]).date())
 
 if st.button('Predict'):
-    # Prepare data for prediction
-    last_data = df['Close_ms'].values[-1].reshape(1, 1, 1)
-    future_dates = pd.date_range(start=date_input, periods=365*2, freq='D')  # Predict for 2 years
+    try:
+        # Prepare data for prediction
+        look_back = 1
+        last_data = prepare_input(df, look_back)
+
+        future_dates = pd.date_range(start=date_input, periods=365*2, freq='D')  # Predict for 2 years
+        predictions = []
+
+        for _ in future_dates:
+            pred = model.predict(last_data, batch_size=1)
+            predictions.append(pred[0, 0])
+            # Update last_data to include the most recent prediction
+            last_data = np.append(last_data[:, 1:, :], pred.reshape(1, 1, 1), axis=1)
+        
+        # Inverse transform predictions
+        predictions_original = ms.inverse_transform(np.array(predictions).reshape(-1, 1))
+        
+        # Create a DataFrame for visualization
+        pred_df = pd.DataFrame({
+            'Date': future_dates,
+            'Predicted Close': predictions_original.flatten()
+        })
+        
+        # Display results
+        st.write(pred_df)
+        
+        # Plot results
+        plt.figure(figsize=(15, 7))
+        plt.plot(df.index, df['Close'], color='blue', label='Historical')
+        plt.plot(pred_df['Date'], pred_df['Predicted Close'], color='red', label='Predicted')
+        plt.xlabel('Date')
+        plt.ylabel('Stock Price')
+        plt.title('Stock Price Prediction for PT Kalbe Farma Tbk.')
+        plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        plt.gcf().autofmt_xdate()
+        plt.legend()
+        st.pyplot(plt)
     
-    predictions = []
-    for _ in future_dates:
-        pred = model.predict(last_data)
-        predictions.append(pred[0, 0])
-        last_data = np.append(last_data[:, 1:, :], pred.reshape(1, 1, 1), axis=1)
-    
-    # Inverse transform predictions
-    predictions_original = ms.inverse_transform(np.array(predictions).reshape(-1, 1))
-    
-    # Create a DataFrame for visualization
-    pred_df = pd.DataFrame({
-        'Date': future_dates,
-        'Predicted Close': predictions_original.flatten()
-    })
-    
-    # Display results
-    st.write(pred_df)
-    
-    # Plot results
-    plt.figure(figsize=(15, 7))
-    plt.plot(df.index, df['Close'], color='blue', label='Historical')
-    plt.plot(pred_df['Date'], pred_df['Predicted Close'], color='red', label='Predicted')
-    plt.xlabel('Date')
-    plt.ylabel('Stock Price')
-    plt.title('Stock Price Prediction for PT Kalbe Farma Tbk.')
-    plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
-    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
-    plt.gcf().autofmt_xdate()
-    plt.legend()
-    st.pyplot(plt)
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
