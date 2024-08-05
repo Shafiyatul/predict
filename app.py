@@ -1,68 +1,78 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
-import tensorflow as tf
-from sklearn.preprocessing import MinMaxScaler
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import datetime
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from sklearn.preprocessing import MinMaxScaler
 
 # Load the model
-model = tf.keras.models.load_model('lstm_model.h5')
+model = load_model('lstm_model.h5')
 
-# Load the scaler
-scaler = MinMaxScaler(feature_range=(0, 1))
-df = pd.read_csv('KLBF.JK.csv')
-df['Date'] = pd.to_datetime(df['Date'])
-df = df.set_index('Date')
-scaler.fit(df[['Close']])
+# Load and preprocess data
+@st.cache
+def load_data():
+    df = pd.read_csv('KLBF.JK.csv')
+    df['Date'] = pd.to_datetime(df['Date'])
+    df = df.set_index('Date')
+    ms = MinMaxScaler(feature_range=(0, 1))
+    df['Close_ms'] = ms.fit_transform(df[['Close']])
+    return df, ms
 
-# Streamlit App
-st.title('Prediksi Harga Saham PT Kalbe Farma Tbk.')
+df, ms = load_data()
 
-# Input date from user
-input_date = st.date_input("Pilih Tanggal untuk Prediksi", min_value=datetime.today())
-input_date_str = input_date.strftime('%Y-%m-%d')
+def prepare_data(df, look_back=1):
+    values = df['Close_ms'].values.reshape(-1, 1)
+    X, y = [], []
+    for i in range(len(values) - look_back):
+        a = values[i:(i + look_back), 0]
+        X.append(a)
+        y.append(values[i + look_back, 0])
+    X, y = np.array(X), np.array(y)
+    X = X.reshape((X.shape[0], 1, X.shape[1]))
+    return X, y
 
-# Prepare the last known data for prediction
-last_data = df['Close'].values[-1].reshape(-1, 1)
-last_data = last_data.reshape((1, 1, 1))
+# Prepare training data
+X_train, y_train = prepare_data(df)
 
-# Print shapes and values for debugging
-st.write(f"Last data shape for prediction: {last_data.shape}")
-st.write(f"Last data values for prediction: {last_data}")
+# Streamlit app
+st.title('Stock Price Prediction with LSTM')
 
-# Predict the price for the input date
-if st.button('Prediksi Harga Saham'):
-    try:
-        # Check data types and shapes
-        st.write(f"Type of last_data: {type(last_data)}")
-        st.write(f"Last_data: {last_data}")
+date_input = st.date_input("Select the date to predict", pd.to_datetime(df.index[-1]).date())
 
-        # Perform prediction
-        predicted_close_ms = model.predict(last_data)
-        predicted_close = scaler.inverse_transform(predicted_close_ms)
-        
-        st.write(f"Prediksi harga saham PT Kalbe Farma Tbk. untuk {input_date_str} adalah: Rp {predicted_close[0][0]:.2f}")
-
-        # Add predicted value to DataFrame for visualization
-        df_pred = df.copy()
-        predicted_date = pd.Timestamp(input_date)
-        df_pred = pd.concat([df_pred, pd.DataFrame({'Close': predicted_close[0][0]}, index=[predicted_date])])
-
-        # Plot actual and predicted prices
-        plt.figure(figsize=(15, 7))
-        plt.plot(df.index, df['Close'], color='blue', label='Actual')
-        plt.plot(df_pred.index, df_pred['Close'], color='red', linestyle='dotted', label='Predicted')
-        plt.xlabel('Waktu')
-        plt.ylabel('Harga Saham')
-        plt.title('Prediksi Harga Saham PT Kalbe Farma Tbk. dengan LSTM', fontsize=20)
-        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=12))
-        plt.legend()
-        plt.xticks(rotation=30)
-        st.pyplot(plt)
-        
-    except Exception as e:
-        st.error(f"Terjadi kesalahan saat memprediksi: {e}")
-
+if st.button('Predict'):
+    # Prepare data for prediction
+    last_data = df['Close_ms'].values[-1].reshape(1, 1, 1)
+    future_dates = pd.date_range(start=date_input, periods=365*2, freq='D')  # Predict for 2 years
+    
+    predictions = []
+    for _ in future_dates:
+        pred = model.predict(last_data)
+        predictions.append(pred[0, 0])
+        last_data = np.append(last_data[:, 1:, :], pred.reshape(1, 1, 1), axis=1)
+    
+    # Inverse transform predictions
+    predictions_original = ms.inverse_transform(np.array(predictions).reshape(-1, 1))
+    
+    # Create a DataFrame for visualization
+    pred_df = pd.DataFrame({
+        'Date': future_dates,
+        'Predicted Close': predictions_original.flatten()
+    })
+    
+    # Display results
+    st.write(pred_df)
+    
+    # Plot results
+    plt.figure(figsize=(15, 7))
+    plt.plot(df.index, df['Close'], color='blue', label='Historical')
+    plt.plot(pred_df['Date'], pred_df['Predicted Close'], color='red', label='Predicted')
+    plt.xlabel('Date')
+    plt.ylabel('Stock Price')
+    plt.title('Stock Price Prediction for PT Kalbe Farma Tbk.')
+    plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
+    plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    plt.gcf().autofmt_xdate()
+    plt.legend()
+    st.pyplot(plt)
