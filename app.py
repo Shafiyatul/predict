@@ -15,6 +15,11 @@ def load_stock_data(ticker):
         start_date = datetime.datetime(2019, 1, 1)
         end_date = datetime.datetime.now()
         data = pdr.data.get_data_yahoo(ticker, start=start_date, end=end_date)
+
+        # Debugging: Tampilkan beberapa baris pertama dari data
+        st.write("Data saham berhasil diunduh:")
+        st.write(data.head())
+
         return data
     except Exception as e:
         st.error(f"Error mengunduh data saham: {e}")
