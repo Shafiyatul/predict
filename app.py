@@ -78,7 +78,7 @@ st.markdown(
 
 # Input date using date picker, allow up to 2 years ahead, starting from 2023
 two_years_ahead = datetime.date.today() + datetime.timedelta(days=2*365)
-selected_date = st.date_input("Select the date:", value=None, min_value=datetime.date(2023, 1, 1), max_value=two_years_ahead, key='date_picker')
+selected_date = st.date_input("Select the date:", value=None, min_value=datetime.date(2024, 4, 1), max_value=two_years_ahead, key='date_picker')
 
 if selected_date:
     try:
