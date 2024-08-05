@@ -42,12 +42,15 @@ st.line_chart(df['Close'])
 # Select a date for prediction
 st.subheader("Select a Date for Prediction")
 max_date = df.index[-1] + timedelta(days=730)
-prediction_date = st.date_input("Prediction Date", min_value=df.index[-1], max_value=max_date)
+prediction_date = st.date_input("Prediction Date", min_value=df.index[-1].date(), max_value=max_date.date())
 
 # Predict the stock price for the selected date
 if st.button('Predict'):
+    # Convert the last date in the index to a datetime.date object
+    last_date = df.index[-1].date()
+
     # Calculate how many days into the future the prediction date is
-    days_ahead = (prediction_date - df.index[-1]).days
+    days_ahead = (prediction_date - last_date).days
 
     # Use the last available data for prediction
     last_data = df['Close_scaled'].values[-1].reshape(-1, 1)
