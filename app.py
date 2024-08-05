@@ -46,30 +46,6 @@ st.title('Stock Price Prediction')
 
 st.markdown(
     """
-    <style>
-    @keyframes shake {
-        0% { transform: translateX(0); }
-        25% { transform: translateX(-10px); }
-        50% { transform: translateX(10px); }
-        75% { transform: translateX(-10px); }
-        100% { transform: translateX(0); }
-    }
-
-    .reportview-container {
-        background-color: #e0f7fa; /* Hijau muda */
-        animation: shake 5s infinite;
-    }
-    .css-1n6g4vv {
-        display: flex;
-        justify-content: flex-end;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
     **Welcome to the Stock Price Prediction App!**
     This application predicts the stock price of PT Kalbe Farma Tbk based on historical data.
     Use the calendar to select a date to see the predicted stock price on that date.
@@ -87,7 +63,7 @@ if selected_date:
         # Prediction logic
         def get_next_weekday(date):
             next_day = date + pd.Timedelta(days=1)
-            while next_day.weekday() > 4:  # 5 is Saturday, 6 is Sunday
+            while next_day.weekday() > 4:  # Skip Saturdays (5) and Sundays (6)
                 next_day += pd.Timedelta(days=1)
             return next_day
 
@@ -109,6 +85,9 @@ if selected_date:
         predicted_closes = ms.inverse_transform(np.array(predicted_closes_ms).reshape(-1, 1))
         df_future = pd.DataFrame(predicted_closes, index=future_dates, columns=['Close'])
         df_combined = pd.concat([df, df_future])
+
+        # Filter out weekends from the combined dataframe
+        df_combined = df_combined[df_combined.index.weekday < 5]
 
         st.write(f"Predicted price on {selected_date.strftime('%Y-%m-%d')}: **Rp {predicted_closes[-1][0]:.2f}**")
 
