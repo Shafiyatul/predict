@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 import datetime
-import traceback
 
 # Load model
 model = load_model('lstm_model.h5')
@@ -73,7 +72,6 @@ if st.button('Predict'):
         try:
             target_date = datetime.datetime.combine(selected_date, datetime.datetime.min.time())
 
-            # Prediction logic
             def get_next_weekday(date):
                 next_day = date + pd.Timedelta(days=1)
                 while next_day.weekday() > 4:  # 5 is Saturday, 6 is Sunday
@@ -96,8 +94,7 @@ if st.button('Predict'):
                     predicted_closes_ms.append(predicted_close_ms[0, 0])
                     last_data = predicted_close_ms.reshape((1, 1, 1))
                 except Exception as e:
-                    st.error(f"Terjadi kesalahan dalam prediksi: {e}")
-                    traceback.print_exc()
+                    st.error(f"Error during prediction: {e}")
                     break
 
             predicted_closes = ms.inverse_transform(np.array(predicted_closes_ms).reshape(-1, 1))
@@ -117,8 +114,5 @@ if st.button('Predict'):
             ax.grid(True)
             st.pyplot(fig)
 
-        except ValueError:
-            st.error("Invalid date format. Please enter the date in YYYY-MM-DD format.")
         except Exception as e:
-            st.error(f"Terjadi kesalahan: {e}")
-            traceback.print_exc()
+            st.error(f"An unexpected error occurred: {e}")
