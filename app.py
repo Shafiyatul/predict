@@ -9,9 +9,8 @@ from tensorflow.keras.models import load_model
 import yfinance as yf
 
 # Fungsi untuk mengunduh data saham dari Yahoo Finance
-def load_stock_data(ticker):
-    # Mendapatkan data dari 2019 hingga hari ini
-    return yf.download(ticker, start='2019-01-01')
+start = '2019-04-01'
+end = date.today()
 
 # Fungsi untuk memprediksi harga saham
 def predict_stock_price(model, last_data, scaler, days_to_predict):
