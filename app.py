@@ -38,6 +38,10 @@ model = load_model('stock_price_lstm.h5')  # Ganti dengan path model Anda
 df = pd.read_csv('KLBF.JK.csv')
 df['Date'] = pd.to_datetime(df['Date'])
 df.set_index('Date', inplace=True)
+
+# Filter data from 2019 onwards
+df = df[df.index >= '2019-01-01']
+
 ms = MinMaxScaler(feature_range=(0, 1))
 df['Close_ms'] = ms.fit_transform(df[['Close']])
 
@@ -47,7 +51,7 @@ st.title('Stock Price Prediction')
 st.markdown(
     """
     **Welcome to the Stock Price Prediction App!**
-    This application predicts the stock price of PT Kalbe Farma Tbk based on historical data.
+    This application predicts the stock price of PT Kalbe Farma Tbk based on historical data from 2019 onwards.
     Use the calendar to select a date to see the predicted stock price on that date (up to 2 years ahead).
     """
 )
